@@ -1,27 +1,16 @@
 import logging
+import os
+import json
 from datetime import datetime
 import gspread
 from google.oauth2.service_account import Credentials
 from telegram import Update, ReplyKeyboardMarkup, ReplyKeyboardRemove
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes, ConversationHandler
 
-TOKEN = "8438330820:AAHjMB_PUT_LVXCO54NlEYQErMy0LXW2NqA"
-ADMIN_CHAT_ID = 420348563
-SHEET_ID = "14bULAhTGj548t65wIZnjKOBVAXuHoIA8pK2CYiWho9s"
-
-CREDS_INFO = {
-  "type": "service_account",
-  "project_id": "eqlbm-bot",
-  "private_key_id": "9bddfbfab0eeb9c6a604028902db244fc8d1ac53",
-  "private_key": "-----BEGIN PRIVATE KEY-----\nMIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQC2WCjKFEEBWC9Y\n8DIg1n7uZMDFBRAUUopSLMJrJlVVSu1VIINzrZQ3f3iWI3yd/sYlw3bp26XlfvUg\n8OV2VHA1a1CMb7s01g4lwbnWqjtSDzSaxjYhn9ZK93FmVa328Znroq/tSt0c3zXQ\ns9QbxR+z/Zgw4e9qyABVvM/3xaf0UE2F2vWpStZBft89H3FB6J1kCSKBLUkhtQHL\nWj+p5QDCe075j5vuzOdKT4WNZmgFhfNZXKCaC0ydK0/B5xA6KINsyEU683OusTIh\njhiQ+0epiPLQ3hbZZberRI/7dScvqgpU+FlEO9D8tyyGgW1lyEmIyVNIP7NC9VnV\nKTutAU37AgMBAAECggEAA1QdUoBc0MB3r3ZFrqcbuWWqGy6aJN9+L5J/mLh3avor\ngO1PWPznLWgsnwOrfQWElSCPUCThT2IqPrKxuEpBo3KqYsCQuJ3bs5a+D2Fwzxur\nSH6ryEtZpxQDREH2I1bftMHLLQK71ztqiRJvTHPPE1hivymwrCYAfjrXH7Js/B8J\n7Qvje1PCe1yS5G61F8q/Y+HX3AvUiy2/4FN7CSdrUhiUTQXa9AuDYVRVJaz98nFX\nEVMv7mB/OCXeFHtPUn6vfuObO1J5JK/YREYxTfvylYHVYR6Q+sO1dtQmtaAKUTCt\nl+7UCLxDZlvePh85ZmppvUYZ9pQzmT2cOq/qsLECGQKBgQDbDIUWHc2NAb35TqWm\nxeJFhBab/OLmcPtDog7JSImjaTDuZeQkNXhG1ybQ0wn7BNTanpEkbIp5f3BnkGz4\np1FhJhf/hCYWs9JacS6Ny3oEj500C2i0uk4+hQbYQerkKhK6/7jGJIkQS3laF4Qh\nEaSLY6bT85fCFWU8e6xtghe6fQKBgQDVGpQsUfJOgF2gBxk92/8ZnMbbIv4ms1+S\nNNhUyoqN4oyOmQ6xBcRO9FN5BhUtbUO2FPi5ZmdNzolI1zvK3YUtx6EyL2lU4rFF\n8C+OcVqfckeR6ljm3Ykfce6kKDmZ2fBNtE+he6Yre0JmqE83ActnedYf47T1E+k/\nKs6cP/Kb1wKBgQC+7ECrsDpS5uvQes5DeELqWGDkgRy7wkoe/wdoRYNCHRN7FvAs\n5zX4eNrqNKeEVQe5rW/QkZJ4p60vd2CjsiJqTKuqGGKicwWrsu7ixDGL/CkHDdKr\ng59jOstmfr3fNRSyTOWePoYA3+fbsJeHwzrqC2eDYdQqZD+i4iC+Kh/IeQKBgGYq\nw/cronu4VyqtvJBHtNnWrA/LiwWK4br60uxz3lF/19tVzhFYrnEb+hj/rY+F3vyg\nuU5JpiVLa84cQnJUGdGE7+dbi6hCtrLNID+uYMAozd9K9yxX8bG9safKETONpQPb\n+oF1Aom+ImuNLc01cws9AkdvqAYHcb/zCfMnRW0pAoGALfkDDDKPFMKlgqI8exrR\n8Wv0K1MvZoBgCXL1mdnHi0dq2Eh667O7HvMIdjwWx/l2CX/cmeoW+MPEqvyDisZR\n1WIiRzWFL9SQH7VXnBuiUUTW5tTcvAriIsJto1Z2EolExWbXbiH1SK+EoYit35qM\nastaPaD7ekJB1R9ePD44KN0=\n-----END PRIVATE KEY-----\n",
-  "client_email": "eqlbm-sheets@eqlbm-bot.iam.gserviceaccount.com",
-  "client_id": "118330609624712041689",
-  "auth_uri": "https://accounts.google.com/o/oauth2/auth",
-  "token_uri": "https://oauth2.googleapis.com/token",
-  "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
-  "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/eqlbm-sheets%40eqlbm-bot.iam.gserviceaccount.com",
-  "universe_domain": "googleapis.com"
-}
+TOKEN = os.environ["TELEGRAM_TOKEN"]
+ADMIN_CHAT_ID = int(os.environ["ADMIN_CHAT_ID"])
+SHEET_ID = os.environ["SHEET_ID"]
+CREDS_INFO = json.loads(os.environ["GOOGLE_CREDS"])
 
 logging.basicConfig(level=logging.INFO)
 
