@@ -85,7 +85,7 @@ def get_user_status(user_id, username, name):
         return f"Ошибка при проверке: {e}"
 
 async def time_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    keyboard = [["⏳ Сколько осталось", "✅ Мой статус"]]
+    keyboard = [["⏳ Time", "✅ Мой статус"]]
     await update.message.reply_text(
         get_countdown(),
         parse_mode="Markdown",
@@ -95,7 +95,7 @@ async def time_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def check_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     username = f"@{user.username}" if user.username else "без username"
-    keyboard = [["⏳ Сколько осталось", "✅ Мой статус"]]
+    keyboard = [["⏳ Time", "✅ Мой статус"]]
     await update.message.reply_text(
         get_user_status(user.id, username, user.full_name),
         parse_mode="Markdown",
@@ -104,7 +104,7 @@ async def check_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def handle_buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text
-    if text == "⏳ Сколько осталось":
+    if text in ["⏳ Сколько осталось", "⏳ Time"]:
         await time_command(update, context)
     elif text == "✅ Мой статус":
         await check_command(update, context)
@@ -115,7 +115,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     name = user.full_name or "—"
 
     if is_registered(user.id):
-        keyboard = [["ЗАКОНЧИТЬ", "ОТМЕНИТЬ РЕГИСТРАЦИЮ"]]
+        keyboard = [["ЗАКОНЧИТЬ", "ОТМЕНИТЬ РЕГИСТРАЦИЮ"], ["⏳ Time", "✅ Мой статус"]]
         await update.message.reply_text(
             "Вы уже зарегистрированы.",
             reply_markup=ReplyKeyboardMarkup(keyboard, resize_keyboard=True, one_time_keyboard=True)
@@ -138,7 +138,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def handle_chips(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.message.text == "УЗНАТЬ":
-        keyboard = [["⏳ Сколько осталось", "✅ Мой статус"]]
+        keyboard = [["⏳ Time", "✅ Мой статус"]]
         await update.message.reply_text(
             "*EARLY BIRD*\n"
             "🂡 50% дисконт на любой уровень подписки и фиксирует эту стоимость навсегда. Обо всех уровнях подписки ты узнаешь позже, когда будут готовы анонсы.\n\n"
@@ -164,7 +164,7 @@ async def handle_cancel_choice(update: Update, context: ContextTypes.DEFAULT_TYP
             reply_markup=ReplyKeyboardRemove()
         )
     else:
-        keyboard = [["⏳ Сколько осталось", "✅ Мой статус"]]
+        keyboard = [["⏳ Time", "✅ Мой статус"]]
         await update.message.reply_text(
             "Дополнительная информация будет поступать тебе через этого бота. Не удаляй диалог.",
             reply_markup=ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
