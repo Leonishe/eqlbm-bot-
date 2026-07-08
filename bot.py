@@ -7,7 +7,7 @@ from google.oauth2.service_account import Credentials
 from telegram import Update, ReplyKeyboardMarkup, ReplyKeyboardRemove
 from telegram.ext import (
     Application, CommandHandler, MessageHandler,
-    filters, ContextTypes, ConversationHandler, JobQueue
+    filters, ContextTypes, ConversationHandler
 )
 
 TOKEN = os.environ["TELEGRAM_TOKEN"]
@@ -305,15 +305,25 @@ async def broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not user_ids:
         await update.message.reply_text("Список пуст.")
         return
-    sent = failed = 0
+    sent = failed = blocked_count = 0
     for uid in user_ids:
         try:
-            await context.bot.send_message(chat_id=int(uid), text=text)
+            await context.bot.send_message(chat_id=int(uid), text=text, parse_mode="Markdown")
+            mark_active(uid)
             sent += 1
         except Exception as e:
-            logging.error(f"Broadcast failed for {uid}: {e}")
+            if "Forbidden" in str(e) or "blocked" in str(e).lower():
+                mark_blocked(uid)
+                blocked_count += 1
+            else:
+                logging.error(f"Broadcast failed for {uid}: {e}")
             failed += 1
-    await update.message.reply_text(f"✅ Рассылка завершена\nОтправлено: {sent}\nНе доставлено: {failed}")
+    await update.message.reply_text(
+        f"✅ Рассылка завершена\n"
+        f"Отправлено: {sent}\n"
+        f"Заблокировали бота: {blocked_count}\n"
+        f"Другие ошибки: {failed - blocked_count}"
+    )
 
 async def auto_reminder(context: ContextTypes.DEFAULT_TYPE):
     delta = LAUNCH_DATE - datetime.now(timezone.utc)
