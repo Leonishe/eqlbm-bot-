@@ -52,6 +52,15 @@ def remove_user(user_id):
     except Exception as e:
         logging.error(f"Sheet error: {e}")
 
+def get_all_user_ids():
+    try:
+        sheet = get_sheet()
+        rows = sheet.get_all_values()[1:]
+        return [r[0] for r in rows if r[0]]
+    except Exception as e:
+        logging.error(f"Sheet error: {e}")
+        return []
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     username = f"@{user.username}" if user.username else "без username"
@@ -129,6 +138,36 @@ async def list_users(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         await update.message.reply_text(f"Ошибка: {e}")
 
+async def broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_user.id != ADMIN_CHAT_ID:
+        return
+
+    text = ' '.join(context.args)
+    if not text:
+        await update.message.reply_text(
+            "Использование: /broadcast Текст сообщения\n\nПример:\n/broadcast Комьюнити открывается 9 сентября!"
+        )
+        return
+
+    user_ids = get_all_user_ids()
+    if not user_ids:
+        await update.message.reply_text("Список пуст — некому отправлять.")
+        return
+
+    sent = 0
+    failed = 0
+    for uid in user_ids:
+        try:
+            await context.bot.send_message(chat_id=int(uid), text=text)
+            sent += 1
+        except Exception as e:
+            logging.error(f"Failed to send to {uid}: {e}")
+            failed += 1
+
+    await update.message.reply_text(
+        f"✅ Рассылка завершена\nОтправлено: {sent}\nНе доставлено: {failed}"
+    )
+
 def main():
     app = Application.builder().token(TOKEN).build()
     conv = ConversationHandler(
@@ -141,6 +180,7 @@ def main():
     )
     app.add_handler(conv)
     app.add_handler(CommandHandler("list", list_users))
+    app.add_handler(CommandHandler("broadcast", broadcast))
     print("Бот запущен...")
     app.run_polling()
 
