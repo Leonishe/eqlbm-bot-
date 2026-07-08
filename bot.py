@@ -155,7 +155,10 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "👋 Добро пожаловать в Equilibrium Club — закрытое покерное комьюнити.\n\n"
         "Ваша регистрация принята. Вы в списке Early Bird.\n\n"
-        "Хотите узнать какие привилегии вы получите?",
+        "Хотите узнать какие привилегии вы получите?\n\n"
+        "Доступные команды:\n"
+        "/time — сколько осталось до запуска\n"
+        "/check — проверить статус регистрации",
         reply_markup=ReplyKeyboardMarkup(kb, resize_keyboard=True, one_time_keyboard=True)
     )
     return ASK_CHIPS
@@ -248,12 +251,21 @@ async def check_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         get_user_status(update.effective_user.id), parse_mode="Markdown", reply_markup=MAIN_KB
     )
 
+HELP_TEXT = (
+    "Выбери действие:\n\n"
+    "⏳ /time — сколько осталось до запуска\n"
+    "✅ /check — проверить статус регистрации\n"
+    "🔄 /start — главное меню"
+)
+
 async def handle_buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text
     if text in ["⏳ Time", "⏳ Сколько осталось"]:
         await time_command(update, context)
     elif text == "✅ Мой статус":
         await check_command(update, context)
+    else:
+        await update.message.reply_text(HELP_TEXT, reply_markup=MAIN_KB)
 
 async def list_users(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id != ADMIN_CHAT_ID:
@@ -345,8 +357,26 @@ async def auto_reminder(context: ContextTypes.DEFAULT_TYPE):
                     logging.error(f"Failed to send to {uid}: {e}")
 
 # ─── MAIN ─────────────────────────────────────────────────
+async def post_init(app: Application):
+    # Commands for regular users
+    await app.bot.set_my_commands([
+        ("start", "Регистрация / главное меню"),
+        ("time", "Сколько осталось до запуска"),
+        ("check", "Проверить статус регистрации"),
+    ])
+    # Commands for admin only
+    from telegram import BotCommandScopeChat
+    await app.bot.set_my_commands([
+        ("start", "Регистрация / главное меню"),
+        ("time", "Сколько осталось до запуска"),
+        ("check", "Проверить статус регистрации"),
+        ("list", "Список всех участников"),
+        ("stats", "Статистика"),
+        ("broadcast", "Рассылка всем участникам"),
+    ], scope=BotCommandScopeChat(chat_id=ADMIN_CHAT_ID))
+
 def main():
-    app = Application.builder().token(TOKEN).build()
+    app = Application.builder().token(TOKEN).post_init(post_init).build()
 
     conv = ConversationHandler(
         entry_points=[CommandHandler("start", start)],
