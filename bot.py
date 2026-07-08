@@ -1,7 +1,7 @@
 import logging
 import os
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 import gspread
 from google.oauth2.service_account import Credentials
 from telegram import Update, ReplyKeyboardMarkup, ReplyKeyboardRemove
@@ -61,6 +61,54 @@ def get_all_user_ids():
         logging.error(f"Sheet error: {e}")
         return []
 
+
+def get_countdown():
+    launch = datetime(2026, 9, 9, 0, 0, 0, tzinfo=timezone.utc)
+    now = datetime.now(timezone.utc)
+    delta = launch - now
+    if delta.total_seconds() <= 0:
+        return "🚀 Проект уже запущен!"
+    days = delta.days
+    hours, remainder = divmod(delta.seconds, 3600)
+    minutes = remainder // 60
+    return f"⏳ До запуска Equilibrium Club:\n\n*{days}* дней *{hours}* часов *{minutes}* минут\n\n📅 Старт: 9 сентября 2026"
+
+def get_user_status(user_id, username, name):
+    try:
+        sheet = get_sheet()
+        rows = sheet.get_all_values()[1:]
+        for r in rows:
+            if r[0] == str(user_id):
+                return f"✅ Ты в списке Early Bird!\n\nИмя: {r[2]}\nUsername: {r[1]}\nДата регистрации: {r[3]}\n\n🂡 EARLY BIRD + 👑 OG — твои привилегии зафиксированы."
+        return "❌ Ты не зарегистрирован.\n\nНажми /start чтобы зарегистрироваться."
+    except Exception as e:
+        return f"Ошибка при проверке: {e}"
+
+async def time_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    keyboard = [["⏳ Сколько осталось", "✅ Мой статус"]]
+    await update.message.reply_text(
+        get_countdown(),
+        parse_mode="Markdown",
+        reply_markup=ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+    )
+
+async def check_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user = update.effective_user
+    username = f"@{user.username}" if user.username else "без username"
+    keyboard = [["⏳ Сколько осталось", "✅ Мой статус"]]
+    await update.message.reply_text(
+        get_user_status(user.id, username, user.full_name),
+        parse_mode="Markdown",
+        reply_markup=ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+    )
+
+async def handle_buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    text = update.message.text
+    if text == "⏳ Сколько осталось":
+        await time_command(update, context)
+    elif text == "✅ Мой статус":
+        await check_command(update, context)
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     username = f"@{user.username}" if user.username else "без username"
@@ -90,18 +138,16 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def handle_chips(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.message.text == "УЗНАТЬ":
+        keyboard = [["⏳ Сколько осталось", "✅ Мой статус"]]
         await update.message.reply_text(
-            "🂡 *EARLY BIRD* даёт тебе 50% дисконт на любой уровень подписки и фиксирует эту стоимость навсегда. Обо всех уровнях подписки ты узнаешь позже, когда будут готовы анонсы.\n\n"
+            "*EARLY BIRD*\n"
+            "🂡 50% дисконт на любой уровень подписки и фиксирует эту стоимость навсегда. Обо всех уровнях подписки ты узнаешь позже, когда будут готовы анонсы.\n\n"
             "👑 *OG* даёт возможность участвовать во всех турнирах, встречах комьюнити, оффлайн семинарах и конференциях совершенно бесплатно.\n\n"
-            "_(не включает дополнительные расходы каждого участника)_",
+            "_(не включает дополнительные расходы каждого участника)_\n\n"
+            "Дополнительная информация будет поступать тебе через этого бота. Не удаляй диалог.",
             parse_mode="Markdown",
-            reply_markup=ReplyKeyboardRemove()
+            reply_markup=ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
         )
-
-    await update.message.reply_text(
-        "Дополнительная информация будет поступать тебе через этого бота. Не удаляй диалог.",
-        reply_markup=ReplyKeyboardRemove()
-    )
     return ConversationHandler.END
 
 async def handle_cancel_choice(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -118,9 +164,10 @@ async def handle_cancel_choice(update: Update, context: ContextTypes.DEFAULT_TYP
             reply_markup=ReplyKeyboardRemove()
         )
     else:
+        keyboard = [["⏳ Сколько осталось", "✅ Мой статус"]]
         await update.message.reply_text(
             "Дополнительная информация будет поступать тебе через этого бота. Не удаляй диалог.",
-            reply_markup=ReplyKeyboardRemove()
+            reply_markup=ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
         )
     return ConversationHandler.END
 
