@@ -116,6 +116,9 @@ class Discord:
         r.raise_for_status()
         return r.json() if r.text else {}
 
+    async def me(self):
+        return await self._req("GET", "/users/@me")
+
     async def roles(self):
         return await self._req("GET", f"/guilds/{GUILD}/roles")
 
@@ -134,14 +137,22 @@ class Discord:
         return await self._req("PATCH", f"/channels/{cid}", json=payload)
 
 
-def overwrites(everyone_id: str, allowed_ids: list[str], readonly: bool, kind: int):
-    """Права категории: закрыта для всех, открыта перечисленным ролям."""
+def overwrites(everyone_id: str, allowed_ids: list[str], readonly: bool, kind: int,
+               bot_id: str = ""):
+    """Права категории: закрыта для всех, открыта перечисленным ролям.
+
+    Бот всегда добавляется отдельной строкой — иначе, закрыв категорию,
+    он теряет к ней доступ и не может её больше править.
+    """
     out = []
     if allowed_ids:
         out.append({"id": everyone_id, "type": 0, "deny": str(VIEW), "allow": "0"})
         allow = VIEW | CONNECT | (0 if readonly else SEND) | (THREADS if kind == FORUM else 0)
         for rid in allowed_ids:
             out.append({"id": rid, "type": 0, "allow": str(allow), "deny": "0"})
+        if bot_id:
+            out.append({"id": bot_id, "type": 1,
+                        "allow": str(VIEW | SEND | CONNECT), "deny": "0"})
     elif readonly:
         out.append({"id": everyone_id, "type": 0, "deny": str(SEND), "allow": "0"})
     return out
@@ -155,6 +166,7 @@ async def main():
     async with httpx.AsyncClient(headers=headers, timeout=30) as client:
         d = Discord(client)
 
+        bot_id = (await d.me())["id"]
         existing_roles = {r["name"]: r for r in await d.roles()}
         everyone = next(r["id"] for r in existing_roles.values()
                         if r["name"] == "@everyone")
@@ -191,7 +203,7 @@ async def main():
         for pos, block in enumerate(STRUCTURE):
             cat = by_name.get(block["name"].lower())
             allowed = [role_id[r] for r in block["access"] if r in role_id]
-            perms = overwrites(everyone, allowed, False, TEXT)
+            perms = overwrites(everyone, allowed, False, TEXT, bot_id)
 
             if not cat:
                 cat = await d.create_channel({
@@ -209,7 +221,7 @@ async def main():
                     await d.edit_channel(found["id"], {
                         "parent_id": cat["id"], "position": i,
                         "permission_overwrites": overwrites(
-                            everyone, allowed, opts.get("readonly", False), ctype),
+                            everyone, allowed, opts.get("readonly", False), ctype, bot_id),
                     })
                     print(f"  канал есть: {cname}")
                     continue
@@ -217,7 +229,7 @@ async def main():
                     "name": cname, "type": ctype, "parent_id": cat["id"],
                     "position": i,
                     "permission_overwrites": overwrites(
-                        everyone, allowed, opts.get("readonly", False), ctype),
+                        everyone, allowed, opts.get("readonly", False), ctype, bot_id),
                 })
                 print(f"  канал создан: {cname}")
 
