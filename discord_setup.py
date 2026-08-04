@@ -208,39 +208,55 @@ async def main():
             by_name["правила"] = by_name.pop("rules")
             print("канал переименован: rules → правила")
 
+        skipped: list[tuple[str, str, int]] = []
+
         for pos, block in enumerate(STRUCTURE):
             cat = by_name.get(block["name"].lower())
             allowed = [role_id[r] for r in block["access"] if r in role_id]
             perms = overwrites(everyone, allowed, False, TEXT, bot_id)
 
-            if not cat:
-                cat = await d.create_channel({
+            try:
+                if not cat:
+                    cat = await d.create_channel({
                     "name": block["name"], "type": CATEGORY,
                     "position": pos, "permission_overwrites": perms,
                 })
-                print(f"категория создана: {block['name']}")
-            else:
-                await d.edit_channel(cat["id"], {"permission_overwrites": perms,
-                                                 "position": pos})
-                print(f"категория есть, права и порядок обновлены: {block['name']}")
+                    print(f"категория создана: {block['name']}")
+                else:
+                    await d.edit_channel(cat["id"], {"permission_overwrites": perms,
+                                                     "position": pos})
+                    print(f"категория есть, права и порядок обновлены: {block['name']}")
+            except httpx.HTTPStatusError as e:
+                print(f"КАТЕГОРИЯ ПРОПУЩЕНА: {block['name']} (код {e.response.status_code})")
+                continue
 
             for i, (cname, ctype, opts) in enumerate(block["channels"]):
                 found = by_name.get(cname.lower())
-                if found:
-                    await d.edit_channel(found["id"], {
-                        "parent_id": cat["id"], "position": i,
-                        "permission_overwrites": overwrites(
-                            everyone, allowed, opts.get("readonly", False), ctype, bot_id),
-                    })
-                    print(f"  канал есть: {cname}")
-                    continue
-                await d.create_channel({
-                    "name": cname, "type": ctype, "parent_id": cat["id"],
-                    "position": i,
-                    "permission_overwrites": overwrites(
-                        everyone, allowed, opts.get("readonly", False), ctype, bot_id),
-                })
-                print(f"  канал создан: {cname}")
+                perms_ch = overwrites(everyone, allowed,
+                                      opts.get("readonly", False), ctype, bot_id)
+                try:
+                    if found:
+                        await d.edit_channel(found["id"], {
+                            "parent_id": cat["id"], "position": i,
+                            "permission_overwrites": perms_ch,
+                        })
+                        print(f"  канал есть: {cname}")
+                    else:
+                        await d.create_channel({
+                            "name": cname, "type": ctype, "parent_id": cat["id"],
+                            "position": i, "permission_overwrites": perms_ch,
+                        })
+                        print(f"  канал создан: {cname}")
+                except httpx.HTTPStatusError as e:
+                    code = e.response.status_code
+                    skipped.append((cname, block["name"], code))
+                    print(f"  ПРОПУЩЕН: {cname} (код {code})")
+
+        if skipped:
+            print("\nНе удалось тронуть — перенеси эти каналы мышкой:")
+            for cname, block, code in skipped:
+                print(f"  {cname} → {block} (код {code})")
+            print("Причина обычно одна: у канала свои права, и бот его не видит.")
 
     print("\nГотово. Проверь порядок ролей: роль бота должна быть выше VIP.")
     print("Дальше — Настройки сервера → Адаптация: вопрос про лимиты с ролями abi.")
