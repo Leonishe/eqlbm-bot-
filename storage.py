@@ -289,3 +289,53 @@ def _replace_by_username_sync(row: dict) -> None:
             ws.update(f"A{i}:J{i}", [[str(row.get(k, "")) for k in SUBS_HEADER]])
             return
     ws.append_row([str(row.get(k, "")) for k in SUBS_HEADER])
+
+
+# ---------------------------------------------------------------- выставленные счета
+# Счёт живёт в таблице, а не в памяти процесса: перезапуск бота в момент,
+# когда игрок ушёл переводить USDT, больше не теряет его выбор.
+INVOICE_HEADER = ["user_id", "tier", "months", "amount", "created_at", "status"]
+
+
+def _inv2_ws():
+    return _ws("invoices", INVOICE_HEADER)
+
+
+def _save_invoice_sync(user_id: int, tier: str, months: int, amount) -> None:
+    ws = _inv2_ws()
+    row = [str(user_id), tier, str(months), str(amount),
+           datetime.utcnow().isoformat(timespec="seconds"), "open"]
+    ids = ws.col_values(1)
+    for i, val in enumerate(ids[1:], start=2):
+        if str(val).strip() == str(user_id):
+            ws.update(f"A{i}:F{i}", [row])
+            return
+    ws.append_row(row)
+
+
+def _get_invoice_sync(user_id: int) -> dict | None:
+    for r in _inv2_ws().get_all_records():
+        if str(r.get("user_id")).strip() == str(user_id) and r.get("status") == "open":
+            return {"tier": r["tier"], "months": int(r["months"]), "amount": str(r["amount"])}
+    return None
+
+
+def _close_invoice_sync(user_id: int) -> None:
+    ws = _inv2_ws()
+    ids = ws.col_values(1)
+    for i, val in enumerate(ids[1:], start=2):
+        if str(val).strip() == str(user_id):
+            ws.update(f"F{i}", [["paid"]])
+            return
+
+
+async def save_invoice(user_id: int, tier: str, months: int, amount) -> None:
+    await asyncio.to_thread(_save_invoice_sync, user_id, tier, months, amount)
+
+
+async def get_invoice(user_id: int) -> dict | None:
+    return await asyncio.to_thread(_get_invoice_sync, user_id)
+
+
+async def close_invoice(user_id: int) -> None:
+    await asyncio.to_thread(_close_invoice_sync, user_id)

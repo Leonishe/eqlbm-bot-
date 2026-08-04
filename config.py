@@ -87,3 +87,14 @@ def invoice_amount(tier: str, months: int, locked: Decimal | None = None,
 
 def tier_title(tier: str) -> str:
     return TIERS[tier]["title"]
+
+
+def standard_price(tier: str) -> Decimal:
+    """Обычная цена тарифа — та, что действует после 9 сентября."""
+    return TIERS[tier]["price_after"]
+
+
+def is_first_intake(tier: str, locked: Decimal | None = None,
+                    today: date | None = None) -> bool:
+    """Идёт ли ещё первый набор для этой цены (есть что зачёркивать)."""
+    return monthly_price(tier, locked, today) < standard_price(tier)

@@ -80,12 +80,25 @@ async def send_invoice(update: Update, context: ContextTypes.DEFAULT_TYPE,
     amount = config.invoice_amount(tier, months, locked)
 
     context.user_data["invoice"] = {"tier": tier, "months": months, "amount": str(amount)}
+    try:
+        await storage.save_invoice(user.id, tier, months, amount)
+    except Exception:
+        log.exception("счёт не записался в таблицу — останется только в памяти")
 
     per_month = (amount / months).quantize(Decimal("1"))
     per_line = f" ({money(per_month)} в месяц)" if months > 1 else ""
+
+    if config.is_first_intake(tier, locked):
+        full = config.standard_price(tier) * months
+        was = f"<s>{money(full)}</s> "
+        note = "\nЦена первого набора и остаётся твоей при всех продлениях.\n"
+    else:
+        was, note = "", ""
+
     text = (
         f"<b>{config.tier_title(tier)} · {months} мес</b>\n"
-        f"К оплате: <b>{amount} USDT</b>{per_line}\n\n"
+        f"К оплате: {was}<b>{amount} USDT</b>{per_line}\n"
+        f"{note}\n"
         "Сеть — <b>TRC20 (TRON)</b>. Адрес:\n"
         f"<code>{config.USDT_ADDRESS}</code>\n\n"
         "Переведи ровно эту сумму, затем пришли сюда <b>хеш транзакции (TXID)</b> — "
@@ -205,9 +218,15 @@ async def on_button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if data.startswith("t:"):
         tier = data.split(":")[1]
         price = config.monthly_price(tier, locked)
+        if config.is_first_intake(tier, locked):
+            head = (f"<b>{config.tier_title(tier)}</b> — "
+                    f"<s>{money(config.standard_price(tier))}</s> "
+                    f"<b>{money(price)}</b> в месяц\n"
+                    "Цена первого набора, до 9 сентября.")
+        else:
+            head = f"<b>{config.tier_title(tier)}</b> — {money(price)} в месяц."
         await q.edit_message_text(
-            f"<b>{config.tier_title(tier)}</b> — {money(price)} в месяц.\n"
-            "На какой срок берёшь? Чем длиннее, тем дешевле месяц.",
+            head + "\n\nНа какой срок берёшь? Чем длиннее, тем дешевле месяц.",
             parse_mode=ParseMode.HTML, reply_markup=months_kb(tier, locked))
         return
 
@@ -227,6 +246,14 @@ async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         return
 
     invoice = context.user_data.get("invoice")
+    if not invoice:
+        # бот мог перезапуститься, пока игрок ходил переводить — берём из таблицы
+        try:
+            invoice = await storage.get_invoice(update.effective_user.id)
+            if invoice:
+                context.user_data["invoice"] = invoice
+        except Exception:
+            log.exception("не удалось прочитать счёт из таблицы")
     if not invoice:
         await update.message.reply_html(
             "Сначала выбери тариф, чтобы я знал, какую сумму проверять.",
@@ -274,6 +301,10 @@ async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await storage.add_payment(txid, update.effective_user.id,
                               invoice["tier"], int(invoice["months"]), transfer.amount)
     context.user_data.pop("invoice", None)
+    try:
+        await storage.close_invoice(update.effective_user.id)
+    except Exception:
+        pass
 
     link = await discord_invites.personal_invite()
     invite = f"\n\nЗаходи в Discord (ссылка личная, на сутки): {link}" if link else ""
@@ -492,7 +523,7 @@ def main() -> None:
     )
 
     log.info("bot started")
-    app.run_polling(drop_pending_updates=True)
+    app.run_polling(drop_pending_updates=False)
 
 
 if __name__ == "__main__":
