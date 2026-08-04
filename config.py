@@ -27,7 +27,10 @@ ADMIN_IDS = [
 ]
 
 USDT_ADDRESS = _env("USDT_ADDRESS")                  # твой TRC20-кошелёк
-DISCORD_INVITE = _env("DISCORD_INVITE", default="")
+DISCORD_INVITE = _env("DISCORD_INVITE", default="")      # запасная постоянная ссылка
+DISCORD_BOT_TOKEN = _env("DISCORD_BOT_TOKEN", default="")
+DISCORD_CHANNEL_ID = _env("DISCORD_CHANNEL_ID", default="")
+INVITE_MAX_AGE = int(_env("INVITE_MAX_AGE", default="86400"))  # секунд, сутки
 
 GOOGLE_CREDS_JSON = _env("GOOGLE_CREDS_JSON", "GOOGLE_CREDS")
 SHEET_KEY = _env("SHEET_KEY", "SHEET_ID")

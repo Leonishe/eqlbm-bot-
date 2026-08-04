@@ -19,6 +19,7 @@ from telegram.ext import (
 )
 
 import config
+import discord_invites
 import storage
 import tron
 
@@ -33,18 +34,25 @@ def is_admin(user_id: int) -> bool:
     return user_id in config.ADMIN_IDS
 
 
-def tiers_kb() -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup([
-        [InlineKeyboardButton(config.tier_title(t), callback_data=f"t:{t}")]
-        for t in config.TIERS
-    ])
+def money(value) -> str:
+    return f"${int(value):,}".replace(",", " ")
 
 
-def months_kb(tier: str) -> InlineKeyboardMarkup:
+def tiers_kb(locked=None) -> InlineKeyboardMarkup:
+    rows = []
+    for t in config.TIERS:
+        price = config.monthly_price(t, locked)
+        rows.append([InlineKeyboardButton(
+            f"{config.tier_title(t)} · {money(price)}/мес", callback_data=f"t:{t}")])
+    return InlineKeyboardMarkup(rows)
+
+
+def months_kb(tier: str, locked=None) -> InlineKeyboardMarkup:
     rows, row = [], []
     for m in MONTHS:
         off = config.DISCOUNTS[m]
-        label = f"{m} мес" + (f" −{off}%" if off else "")
+        total = config.invoice_amount(tier, m, locked)
+        label = f"{m} мес · {money(total)}" + (f" −{off}%" if off else "")
         row.append(InlineKeyboardButton(label, callback_data=f"m:{tier}:{m}"))
         if len(row) == 2:
             rows.append(row)
@@ -73,9 +81,11 @@ async def send_invoice(update: Update, context: ContextTypes.DEFAULT_TYPE,
 
     context.user_data["invoice"] = {"tier": tier, "months": months, "amount": str(amount)}
 
+    per_month = (amount / months).quantize(Decimal("1"))
+    per_line = f" ({money(per_month)} в месяц)" if months > 1 else ""
     text = (
         f"<b>{config.tier_title(tier)} · {months} мес</b>\n"
-        f"К оплате: <b>{amount} USDT</b>\n\n"
+        f"К оплате: <b>{amount} USDT</b>{per_line}\n\n"
         "Сеть — <b>TRC20 (TRON)</b>. Адрес:\n"
         f"<code>{config.USDT_ADDRESS}</code>\n\n"
         "Переведи ровно эту сумму, затем пришли сюда <b>хеш транзакции (TXID)</b> — "
@@ -103,7 +113,8 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             return
         await storage.set_affiliate(user.id, user.username or "", user.full_name)
         await storage.use_invite(code, user.id)
-        invite = f"\n\nDiscord: {config.DISCORD_INVITE}" if config.DISCORD_INVITE else ""
+        link = await discord_invites.personal_invite()
+        invite = f"\n\nDiscord (ссылка личная, на сутки): {link}" if link else ""
         await update.message.reply_html(
             "Готово, ты в списке комьюнити по аффилейт-программе. "
             f"Платить ничего не нужно.{invite}\n\n"
@@ -185,15 +196,19 @@ async def on_button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await q.answer()
     data = q.data
 
+    locked = await locked_price_of(update.effective_user.id)
+
     if data == "menu":
-        await q.edit_message_text("Выбери тариф:", reply_markup=tiers_kb())
+        await q.edit_message_text("Выбери тариф:", reply_markup=tiers_kb(locked))
         return
 
     if data.startswith("t:"):
         tier = data.split(":")[1]
+        price = config.monthly_price(tier, locked)
         await q.edit_message_text(
-            f"<b>{config.tier_title(tier)}</b> — на какой срок?",
-            parse_mode=ParseMode.HTML, reply_markup=months_kb(tier))
+            f"<b>{config.tier_title(tier)}</b> — {money(price)} в месяц.\n"
+            "На какой срок берёшь? Чем длиннее, тем дешевле месяц.",
+            parse_mode=ParseMode.HTML, reply_markup=months_kb(tier, locked))
         return
 
     if data.startswith("m:"):
@@ -260,7 +275,8 @@ async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
                               invoice["tier"], int(invoice["months"]), transfer.amount)
     context.user_data.pop("invoice", None)
 
-    invite = f"\n\nЗаходи в Discord: {config.DISCORD_INVITE}" if config.DISCORD_INVITE else ""
+    link = await discord_invites.personal_invite()
+    invite = f"\n\nЗаходи в Discord (ссылка личная, на сутки): {link}" if link else ""
     await note.edit_text(
         f"Оплата принята. Тариф {config.tier_title(invoice['tier'])} "
         f"до {expires.strftime('%d.%m.%Y')}.{invite}",
@@ -402,7 +418,8 @@ async def cmd_paid(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
                               "я привяжу строку по нику автоматически."))
 
     if user_id:
-        invite = f"\n\nDiscord: {config.DISCORD_INVITE}" if config.DISCORD_INVITE else ""
+        link = await discord_invites.personal_invite()
+        invite = f"\n\nDiscord (ссылка личная, на сутки): {link}" if link else ""
         try:
             await context.bot.send_message(
                 int(user_id),
@@ -443,6 +460,16 @@ async def cmd_add(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         disable_web_page_preview=True)
 
 
+async def cmd_link(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """/link — выпустить приглашение в Discord руками."""
+    if not is_admin(update.effective_user.id):
+        return
+    link = await discord_invites.personal_invite()
+    await update.message.reply_text(
+        link or "Приглашение не выпустилось: проверь DISCORD_BOT_TOKEN и DISCORD_CHANNEL_ID.",
+        disable_web_page_preview=True)
+
+
 def main() -> None:
     app = Application.builder().token(config.BOT_TOKEN).build()
 
@@ -454,6 +481,7 @@ def main() -> None:
     app.add_handler(CommandHandler("grant", cmd_paid))
     app.add_handler(CommandHandler("invite", cmd_invite))
     app.add_handler(CommandHandler("add", cmd_add))
+    app.add_handler(CommandHandler("link", cmd_link))
     app.add_handler(CallbackQueryHandler(on_button))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, on_text))
 
