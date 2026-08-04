@@ -38,6 +38,7 @@ TEXT, VOICE, CATEGORY, NEWS, FORUM = 0, 2, 4, 5, 15
 # ---------------------------------------------------------------- роли
 # порядок сверху вниз; цвет в десятичном виде
 ROLES = [
+    ("OG", 0xD4537E),
     ("VIP", 0xD9A441),
     ("Pro", 0x8B5CF6),
     ("Base", 0xB39BFA),
@@ -73,7 +74,7 @@ STRUCTURE = [
     },
     {
         "name": "BASE",
-        "access": ["Base", "Pro", "VIP", "Коуч"],
+        "access": ["Base", "Pro", "VIP", "OG"],
         "channels": [
             ("расписание", TEXT, {"readonly": True}),
             ("материалы", TEXT, {"readonly": True}),
@@ -87,7 +88,7 @@ STRUCTURE = [
     },
     {
         "name": "PRO",
-        "access": ["Pro", "VIP", "Коуч"],
+        "access": ["Pro", "VIP", "OG"],
         "channels": [
             ("тематические-тренировки", TEXT, {}),
             ("разборы-баз", FORUM, {}),
@@ -100,11 +101,21 @@ STRUCTURE = [
     },
     {
         "name": "VIP",
-        "access": ["VIP", "Коуч", "Психолог"],
+        "access": ["VIP", "OG", "Коуч", "Психолог"],
         "channels": [
             ("vip-чат", TEXT, {}),
-            ("очередь-на-сервер", TEXT, {}),
-            ("VIP", VOICE, {}),
+            ("очередь-на-сервер", TEXT, {"access": ["VIP"]}),
+            ("VIP", VOICE, {"access": ["VIP", "OG"]}),
+        ],
+    },
+    {
+        # Коуч и психолог сидят только в своём канале и в vip-чате.
+        # У каждого канала свои права, поэтому психолог не видит коучинг и наоборот.
+        "name": "СПЕЦИАЛИСТЫ",
+        "access": ["VIP", "Коуч", "Психолог"],
+        "channels": [
+            ("коучинг", TEXT, {"access": ["VIP", "Коуч"]}),
+            ("психология", TEXT, {"access": ["VIP", "Психолог"]}),
         ],
     },
 ]
@@ -232,7 +243,9 @@ async def main():
 
             for i, (cname, ctype, opts) in enumerate(block["channels"]):
                 found = by_name.get(cname.lower())
-                perms_ch = overwrites(everyone, allowed,
+                allowed_ch = ([role_id[r] for r in opts["access"] if r in role_id]
+                              if "access" in opts else allowed)
+                perms_ch = overwrites(everyone, allowed_ch,
                                       opts.get("readonly", False), ctype, bot_id)
                 try:
                     if found:
