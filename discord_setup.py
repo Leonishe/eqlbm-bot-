@@ -32,7 +32,6 @@ GUILD = os.environ.get("DISCORD_GUILD_ID", "")
 VIEW = 1 << 10          # просмотр канала
 SEND = 1 << 11          # писать сообщения
 CONNECT = 1 << 20       # заходить в голосовой
-THREADS = 1 << 34       # создавать ветки в форуме
 
 TEXT, VOICE, CATEGORY, NEWS, FORUM = 0, 2, 4, 5, 15
 
@@ -67,8 +66,9 @@ STRUCTURE = [
         "channels": [
             ("правила", TEXT, {"readonly": True}),
             ("объявления", NEWS, {"readonly": True}),
-            ("общий-чат", TEXT, {}),
+            ("main", TEXT, {}),
             ("рейкбэк", TEXT, {}),
+            ("заносы", TEXT, {}),
         ],
     },
     {
@@ -78,6 +78,9 @@ STRUCTURE = [
             ("расписание", TEXT, {"readonly": True}),
             ("материалы", TEXT, {"readonly": True}),
             ("записи-тренировок", TEXT, {"readonly": True}),
+            ("abi10-база", TEXT, {}),
+            ("abi30", TEXT, {}),
+            ("abi100", TEXT, {}),
             ("вопросы", TEXT, {}),
             ("Тренировка", VOICE, {}),
         ],
@@ -86,10 +89,13 @@ STRUCTURE = [
         "name": "PRO",
         "access": ["Pro", "VIP", "Коуч"],
         "channels": [
-            ("стримы-работы-над-игрой", TEXT, {}),
             ("тематические-тренировки", TEXT, {}),
             ("разборы-баз", FORUM, {}),
             ("споты", FORUM, {}),
+            ("hands", TEXT, {}),
+            ("pko", TEXT, {}),
+            ("icm", TEXT, {}),
+            ("Стримы работы над игрой", VOICE, {}),
         ],
     },
     {
@@ -147,7 +153,9 @@ def overwrites(everyone_id: str, allowed_ids: list[str], readonly: bool, kind: i
     out = []
     if allowed_ids:
         out.append({"id": everyone_id, "type": 0, "deny": str(VIEW), "allow": "0"})
-        allow = VIEW | CONNECT | (0 if readonly else SEND) | (THREADS if kind == FORUM else 0)
+        # в форуме право «писать» и есть право создавать темы —
+        # отдельный бит про ветки не нужен и требует прав, которых у бота нет
+        allow = VIEW | CONNECT | (0 if readonly else SEND)
         for rid in allowed_ids:
             out.append({"id": rid, "type": 0, "allow": str(allow), "deny": "0"})
         if bot_id:
@@ -212,8 +220,9 @@ async def main():
                 })
                 print(f"категория создана: {block['name']}")
             else:
-                await d.edit_channel(cat["id"], {"permission_overwrites": perms})
-                print(f"категория есть, права обновлены: {block['name']}")
+                await d.edit_channel(cat["id"], {"permission_overwrites": perms,
+                                                 "position": pos})
+                print(f"категория есть, права и порядок обновлены: {block['name']}")
 
             for i, (cname, ctype, opts) in enumerate(block["channels"]):
                 found = by_name.get(cname.lower())
