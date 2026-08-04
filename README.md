@@ -31,12 +31,12 @@
 
 | Переменная | Что это |
 |---|---|
-| `BOT_TOKEN` | токен от @BotFather |
-| `ADMIN_IDS` | твой Telegram ID (можно несколько через запятую) |
+| `BOT_TOKEN` | токен от @BotFather (подходит и старое имя `TELEGRAM_TOKEN`) |
+| `ADMIN_IDS` | твой Telegram ID, можно несколько через запятую (подходит `ADMIN_CHAT_ID`) |
 | `USDT_ADDRESS` | кошелёк TRC20, на который принимаешь |
 | `DISCORD_INVITE` | ссылка-приглашение, уходит после оплаты |
-| `GOOGLE_CREDS_JSON` | json сервисного аккаунта целиком, одной строкой |
-| `SHEET_KEY` | id таблицы из её адреса |
+| `GOOGLE_CREDS_JSON` | json сервисного аккаунта целиком, одной строкой (подходит `GOOGLE_CREDS`) |
+| `SHEET_KEY` | id таблицы из её адреса (подходит `SHEET_ID`) |
 | `TRONGRID_KEY` | необязательно, снимает лимиты публичного API |
 | `TX_MAX_AGE_HOURS` | срок годности транзакции, по умолчанию 24 |
 

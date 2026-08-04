@@ -5,20 +5,38 @@ from datetime import date
 from decimal import Decimal
 
 # ---------------------------------------------------------------- окружение
-BOT_TOKEN = os.environ["BOT_TOKEN"]
-ADMIN_IDS = [int(x) for x in os.environ.get("ADMIN_IDS", "").replace(" ", "").split(",") if x]
+def _env(*names: str, default=None):
+    """Первое заданное значение из нескольких возможных имён переменной.
 
-USDT_ADDRESS = os.environ["USDT_ADDRESS"]            # твой TRC20-кошелёк
-DISCORD_INVITE = os.environ.get("DISCORD_INVITE", "")
+    Имена от старого бота (TELEGRAM_TOKEN, GOOGLE_CREDS, SHEET_ID, ADMIN_CHAT_ID)
+    поддерживаются наравне с новыми — переименовывать в Railway ничего не нужно.
+    """
+    for n in names:
+        v = os.environ.get(n)
+        if v:
+            return v
+    if default is None:
+        raise RuntimeError(f"не задана переменная окружения: {' или '.join(names)}")
+    return default
 
-GOOGLE_CREDS_JSON = os.environ["GOOGLE_CREDS_JSON"]  # содержимое service-account json
-SHEET_KEY = os.environ["SHEET_KEY"]                  # id таблицы из её URL
 
-TRONGRID_KEY = os.environ.get("TRONGRID_KEY", "")    # необязательно, снимает лимиты
+BOT_TOKEN = _env("BOT_TOKEN", "TELEGRAM_TOKEN")
+ADMIN_IDS = [
+    int(x) for x in _env("ADMIN_IDS", "ADMIN_CHAT_ID", default="")
+    .replace(" ", "").split(",") if x.strip().lstrip("-").isdigit()
+]
+
+USDT_ADDRESS = _env("USDT_ADDRESS")                  # твой TRC20-кошелёк
+DISCORD_INVITE = _env("DISCORD_INVITE", default="")
+
+GOOGLE_CREDS_JSON = _env("GOOGLE_CREDS_JSON", "GOOGLE_CREDS")
+SHEET_KEY = _env("SHEET_KEY", "SHEET_ID")
+
+TRONGRID_KEY = _env("TRONGRID_KEY", default="")    # необязательно, снимает лимиты
 USDT_CONTRACT = "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t"  # USDT TRC20
 
-TZ = os.environ.get("TZ", "Europe/Moscow")
-REMIND_HOUR = int(os.environ.get("REMIND_HOUR", "12"))
+TZ = _env("TZ", default="Europe/Moscow")
+REMIND_HOUR = int(_env("REMIND_HOUR", default="12"))
 
 # ---------------------------------------------------------------- тарифы
 # price_now — цена первого набора, price_after — с 9 сентября
@@ -34,7 +52,7 @@ DISCOUNTS = {1: 0, 3: 10, 6: 17, 12: 20}
 PRICE_SWITCH_DATE = date(2026, 9, 9)
 
 # сколько часов транзакция считается свежей (защита от чужих TXID из блокчейна)
-TX_MAX_AGE_HOURS = int(os.environ.get("TX_MAX_AGE_HOURS", "24"))
+TX_MAX_AGE_HOURS = int(_env("TX_MAX_AGE_HOURS", default="24"))
 
 # допустимый недобор по сумме (округления в кошельках)
 AMOUNT_TOLERANCE = Decimal("0.02")
