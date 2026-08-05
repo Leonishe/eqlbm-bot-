@@ -79,6 +79,17 @@ STRUCTURE = [
             ("расписание", TEXT, {"readonly": True}),
             ("материалы", TEXT, {"readonly": True}),
             ("записи-тренировок", TEXT, {"readonly": True}),
+            ("разбор-раздач", FORUM, {
+                "topic": (
+                    "Одна раздача — один пост. Общего чата тут нет, пиши внутри поста.\n\n"
+                    "В заголовок: улица и решение, например «AK на 12бб, пуш или колл».\n"
+                    "В посте укажи: рум и бай-ин, стадию турнира, стеки в бб, позиции, "
+                    "префлоп-действия и своё решение с рассуждением.\n\n"
+                    "Скриншот или конвертер раздачи приветствуются. "
+                    "Разбираем решение, а не игрока."
+                ),
+                "tags": ["префлоп", "постфлоп", "пуш-фолд", "ICM", "финалка", "вопрос"],
+            }),
             ("abi10-база", TEXT, {}),
             ("abi30", TEXT, {}),
             ("abi100", TEXT, {}),
@@ -91,8 +102,14 @@ STRUCTURE = [
         "access": ["Pro", "VIP", "OG"],
         "channels": [
             ("тематические-тренировки", TEXT, {}),
-            ("разборы-баз", FORUM, {}),
-            ("споты", FORUM, {}),
+            ("споты", FORUM, {
+                "topic": (
+                    "Узкие споты и теория. Один спот — один пост.\n\n"
+                    "Если есть расчёт из солвера, приложи его сразу: так обсуждение "
+                    "начинается с цифр, а не с догадок."
+                ),
+                "tags": ["солвер", "теория", "ресёрч", "поле"],
+            }),
             ("hands", TEXT, {}),
             ("pko", TEXT, {}),
             ("icm", TEXT, {}),
@@ -248,16 +265,21 @@ async def main():
                 perms_ch = overwrites(everyone, allowed_ch,
                                       opts.get("readonly", False), ctype, bot_id)
                 try:
+                    extra = {}
+                    if opts.get("topic"):
+                        extra["topic"] = opts["topic"]
+                    if opts.get("tags"):
+                        extra["available_tags"] = [{"name": t} for t in opts["tags"]]
                     if found:
                         await d.edit_channel(found["id"], {
                             "parent_id": cat["id"], "position": i,
-                            "permission_overwrites": perms_ch,
+                            "permission_overwrites": perms_ch, **extra,
                         })
                         print(f"  канал есть: {cname}")
                     else:
                         await d.create_channel({
                             "name": cname, "type": ctype, "parent_id": cat["id"],
-                            "position": i, "permission_overwrites": perms_ch,
+                            "position": i, "permission_overwrites": perms_ch, **extra,
                         })
                         print(f"  канал создан: {cname}")
                 except httpx.HTTPStatusError as e:
