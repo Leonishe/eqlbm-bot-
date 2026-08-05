@@ -67,8 +67,15 @@ async def incoming_transfers(hours: int | None = None) -> list[Transfer]:
 
 
 async def find_transfer(txid: str) -> Transfer | None:
+    """Ищем перевод в широком окне.
+
+    Окно шире срока годности счёта намеренно: иначе перевод, сделанный
+    позавчера, просто не находится, и человек получает «не нашёл такой
+    перевод» вместо внятного «транзакция слишком старая». Годность
+    проверяет уже check().
+    """
     txid = normalize_txid(txid)
-    for t in await incoming_transfers():
+    for t in await incoming_transfers(config.TX_LOOKUP_HOURS):
         if t.txid == txid:
             return t
     return None
