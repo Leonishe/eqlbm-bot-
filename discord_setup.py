@@ -32,13 +32,13 @@ GUILD = os.environ.get("DISCORD_GUILD_ID", "")
 VIEW = 1 << 10          # просмотр канала
 SEND = 1 << 11          # писать сообщения
 CONNECT = 1 << 20       # заходить в голосовой
+THREADS = 1 << 34       # создавать ветки в форуме
 
 TEXT, VOICE, CATEGORY, NEWS, FORUM = 0, 2, 4, 5, 15
 
 # ---------------------------------------------------------------- роли
 # порядок сверху вниз; цвет в десятичном виде
 ROLES = [
-    ("OG", 0xD4537E),
     ("VIP", 0xD9A441),
     ("Pro", 0x8B5CF6),
     ("Base", 0xB39BFA),
@@ -67,72 +67,38 @@ STRUCTURE = [
         "channels": [
             ("правила", TEXT, {"readonly": True}),
             ("объявления", NEWS, {"readonly": True}),
-            ("main", TEXT, {}),
+            ("общий-чат", TEXT, {}),
             ("рейкбэк", TEXT, {}),
-            ("заносы", TEXT, {}),
         ],
     },
     {
         "name": "BASE",
-        "access": ["Base", "Pro", "VIP", "OG"],
+        "access": ["Base", "Pro", "VIP", "Коуч"],
         "channels": [
             ("расписание", TEXT, {"readonly": True}),
             ("материалы", TEXT, {"readonly": True}),
             ("записи-тренировок", TEXT, {"readonly": True}),
-            ("разбор-раздач", FORUM, {
-                "topic": (
-                    "Одна раздача — один пост. Общего чата тут нет, пиши внутри поста.\n\n"
-                    "В заголовок: улица и решение, например «AK на 12бб, пуш или колл».\n"
-                    "В посте укажи: рум и бай-ин, стадию турнира, стеки в бб, позиции, "
-                    "префлоп-действия и своё решение с рассуждением.\n\n"
-                    "Скриншот или конвертер раздачи приветствуются. "
-                    "Разбираем решение, а не игрока."
-                ),
-                "tags": ["префлоп", "постфлоп", "пуш-фолд", "ICM", "финалка", "вопрос"],
-            }),
-            ("abi10-база", TEXT, {}),
-            ("abi30", TEXT, {}),
-            ("abi100", TEXT, {}),
             ("вопросы", TEXT, {}),
             ("Тренировка", VOICE, {}),
         ],
     },
     {
         "name": "PRO",
-        "access": ["Pro", "VIP", "OG"],
+        "access": ["Pro", "VIP", "Коуч"],
         "channels": [
+            ("стримы-работы-над-игрой", TEXT, {}),
             ("тематические-тренировки", TEXT, {}),
-            ("споты", FORUM, {
-                "topic": (
-                    "Узкие споты и теория. Один спот — один пост.\n\n"
-                    "Если есть расчёт из солвера, приложи его сразу: так обсуждение "
-                    "начинается с цифр, а не с догадок."
-                ),
-                "tags": ["солвер", "теория", "ресёрч", "поле"],
-            }),
-            ("hands", TEXT, {}),
-            ("pko", TEXT, {}),
-            ("icm", TEXT, {}),
-            ("Стримы работы над игрой", VOICE, {}),
+            ("разборы-баз", FORUM, {}),
+            ("споты", FORUM, {}),
         ],
     },
     {
         "name": "VIP",
-        "access": ["VIP", "OG", "Коуч", "Психолог"],
-        "channels": [
-            ("vip-чат", TEXT, {}),
-            ("очередь-на-сервер", TEXT, {"access": ["VIP"]}),
-            ("VIP", VOICE, {"access": ["VIP", "OG"]}),
-        ],
-    },
-    {
-        # Коуч и психолог сидят только в своём канале и в vip-чате.
-        # У каждого канала свои права, поэтому психолог не видит коучинг и наоборот.
-        "name": "СПЕЦИАЛИСТЫ",
         "access": ["VIP", "Коуч", "Психолог"],
         "channels": [
-            ("коучинг", TEXT, {"access": ["VIP", "Коуч"]}),
-            ("психология", TEXT, {"access": ["VIP", "Психолог"]}),
+            ("vip-чат", TEXT, {}),
+            ("очередь-на-сервер", TEXT, {}),
+            ("VIP", VOICE, {}),
         ],
     },
 ]
@@ -149,9 +115,6 @@ class Discord:
             return await self._req(method, path, **kw)
         r.raise_for_status()
         return r.json() if r.text else {}
-
-    async def me(self):
-        return await self._req("GET", "/users/@me")
 
     async def roles(self):
         return await self._req("GET", f"/guilds/{GUILD}/roles")
@@ -171,24 +134,14 @@ class Discord:
         return await self._req("PATCH", f"/channels/{cid}", json=payload)
 
 
-def overwrites(everyone_id: str, allowed_ids: list[str], readonly: bool, kind: int,
-               bot_id: str = ""):
-    """Права категории: закрыта для всех, открыта перечисленным ролям.
-
-    Бот всегда добавляется отдельной строкой — иначе, закрыв категорию,
-    он теряет к ней доступ и не может её больше править.
-    """
+def overwrites(everyone_id: str, allowed_ids: list[str], readonly: bool, kind: int):
+    """Права категории: закрыта для всех, открыта перечисленным ролям."""
     out = []
     if allowed_ids:
         out.append({"id": everyone_id, "type": 0, "deny": str(VIEW), "allow": "0"})
-        # в форуме право «писать» и есть право создавать темы —
-        # отдельный бит про ветки не нужен и требует прав, которых у бота нет
-        allow = VIEW | CONNECT | (0 if readonly else SEND)
+        allow = VIEW | CONNECT | (0 if readonly else SEND) | (THREADS if kind == FORUM else 0)
         for rid in allowed_ids:
             out.append({"id": rid, "type": 0, "allow": str(allow), "deny": "0"})
-        if bot_id:
-            out.append({"id": bot_id, "type": 1,
-                        "allow": str(VIEW | SEND | CONNECT), "deny": "0"})
     elif readonly:
         out.append({"id": everyone_id, "type": 0, "deny": str(SEND), "allow": "0"})
     return out
@@ -202,7 +155,6 @@ async def main():
     async with httpx.AsyncClient(headers=headers, timeout=30) as client:
         d = Discord(client)
 
-        bot_id = (await d.me())["id"]
         existing_roles = {r["name"]: r for r in await d.roles()}
         everyone = next(r["id"] for r in existing_roles.values()
                         if r["name"] == "@everyone")
@@ -236,62 +188,38 @@ async def main():
             by_name["правила"] = by_name.pop("rules")
             print("канал переименован: rules → правила")
 
-        skipped: list[tuple[str, str, int]] = []
-
         for pos, block in enumerate(STRUCTURE):
             cat = by_name.get(block["name"].lower())
             allowed = [role_id[r] for r in block["access"] if r in role_id]
-            perms = overwrites(everyone, allowed, False, TEXT, bot_id)
+            perms = overwrites(everyone, allowed, False, TEXT)
 
-            try:
-                if not cat:
-                    cat = await d.create_channel({
+            if not cat:
+                cat = await d.create_channel({
                     "name": block["name"], "type": CATEGORY,
                     "position": pos, "permission_overwrites": perms,
                 })
-                    print(f"категория создана: {block['name']}")
-                else:
-                    await d.edit_channel(cat["id"], {"permission_overwrites": perms,
-                                                     "position": pos})
-                    print(f"категория есть, права и порядок обновлены: {block['name']}")
-            except httpx.HTTPStatusError as e:
-                print(f"КАТЕГОРИЯ ПРОПУЩЕНА: {block['name']} (код {e.response.status_code})")
-                continue
+                print(f"категория создана: {block['name']}")
+            else:
+                await d.edit_channel(cat["id"], {"permission_overwrites": perms})
+                print(f"категория есть, права обновлены: {block['name']}")
 
             for i, (cname, ctype, opts) in enumerate(block["channels"]):
                 found = by_name.get(cname.lower())
-                allowed_ch = ([role_id[r] for r in opts["access"] if r in role_id]
-                              if "access" in opts else allowed)
-                perms_ch = overwrites(everyone, allowed_ch,
-                                      opts.get("readonly", False), ctype, bot_id)
-                try:
-                    extra = {}
-                    if opts.get("topic"):
-                        extra["topic"] = opts["topic"]
-                    if opts.get("tags"):
-                        extra["available_tags"] = [{"name": t} for t in opts["tags"]]
-                    if found:
-                        await d.edit_channel(found["id"], {
-                            "parent_id": cat["id"], "position": i,
-                            "permission_overwrites": perms_ch, **extra,
-                        })
-                        print(f"  канал есть: {cname}")
-                    else:
-                        await d.create_channel({
-                            "name": cname, "type": ctype, "parent_id": cat["id"],
-                            "position": i, "permission_overwrites": perms_ch, **extra,
-                        })
-                        print(f"  канал создан: {cname}")
-                except httpx.HTTPStatusError as e:
-                    code = e.response.status_code
-                    skipped.append((cname, block["name"], code))
-                    print(f"  ПРОПУЩЕН: {cname} (код {code})")
-
-        if skipped:
-            print("\nНе удалось тронуть — перенеси эти каналы мышкой:")
-            for cname, block, code in skipped:
-                print(f"  {cname} → {block} (код {code})")
-            print("Причина обычно одна: у канала свои права, и бот его не видит.")
+                if found:
+                    await d.edit_channel(found["id"], {
+                        "parent_id": cat["id"], "position": i,
+                        "permission_overwrites": overwrites(
+                            everyone, allowed, opts.get("readonly", False), ctype),
+                    })
+                    print(f"  канал есть: {cname}")
+                    continue
+                await d.create_channel({
+                    "name": cname, "type": ctype, "parent_id": cat["id"],
+                    "position": i,
+                    "permission_overwrites": overwrites(
+                        everyone, allowed, opts.get("readonly", False), ctype),
+                })
+                print(f"  канал создан: {cname}")
 
     print("\nГотово. Проверь порядок ролей: роль бота должна быть выше VIP.")
     print("Дальше — Настройки сервера → Адаптация: вопрос про лимиты с ролями abi.")

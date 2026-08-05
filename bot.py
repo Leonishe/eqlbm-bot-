@@ -11,7 +11,12 @@ from datetime import date, datetime
 from decimal import Decimal
 from zoneinfo import ZoneInfo
 
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
+from telegram import (
+    BotCommand, BotCommandScopeAllChatAdministrators,
+    BotCommandScopeAllGroupChats, BotCommandScopeAllPrivateChats,
+    BotCommandScopeChat, BotCommandScopeDefault,
+    InlineKeyboardButton, InlineKeyboardMarkup, Update,
+)
 from telegram.constants import ParseMode
 from telegram.ext import (
     Application, CallbackQueryHandler, CommandHandler,
@@ -110,9 +115,28 @@ async def send_invoice(update: Update, context: ContextTypes.DEFAULT_TYPE,
 
 
 # ---------------------------------------------------------------- команды
-async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def heal_chat_menu(bot, chat_id: int, user_id: int) -> None:
+    """Чинит меню в конкретном чате.
+
+    Старый бот выставлял команды персонально каждому, кто его запускал.
+    Такой набор перекрывает общий, и стереть его можно только по этому же
+    чату — поэтому чистим при первом касании.
+    """
+    scope = BotCommandScopeChat(chat_id=chat_id)
+    try:
+        if user_id in config.ADMIN_IDS:
+            await bot.set_my_commands(ADMIN_COMMANDS, scope=scope)
+        else:
+            await bot.delete_my_commands(scope=scope)
+    except Exception as exc:
+        log.warning("heal menu %s: %s", chat_id, exc)
+
+
+
     args = context.args or []
     user = update.effective_user
+
+    await heal_chat_menu(context.bot, update.effective_chat.id, user.id)
 
     # приглашение от админа: aff_<код> — доступ в чат без оплаты
     if args and args[0].startswith("aff_"):
@@ -501,13 +525,68 @@ async def cmd_link(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         disable_web_page_preview=True)
 
 
+PUBLIC_COMMANDS = [
+    BotCommand("start", "Подписка и оплата"),
+    BotCommand("status", "Моя подписка"),
+    BotCommand("help", "Помощь"),
+]
+
+ADMIN_COMMANDS = PUBLIC_COMMANDS + [
+    BotCommand("paid", "Записать оплату вручную"),
+    BotCommand("add", "Добавить игрока"),
+    BotCommand("invite", "Ссылка для аффилейт-игрока"),
+    BotCommand("subs", "Список подписок"),
+    BotCommand("link", "Инвайт в Discord"),
+]
+
+
+async def post_init(app: Application) -> None:
+    """Приводит меню команд в порядок при каждом запуске.
+
+    Меню от старого бота могло быть выставлено в любом scope и с любым
+    language_code — более узкий scope перекрывает дефолтный, поэтому
+    сначала стираем всё, и только потом ставим своё.
+    """
+    scopes = (
+        BotCommandScopeDefault(),
+        BotCommandScopeAllPrivateChats(),
+        BotCommandScopeAllGroupChats(),
+        BotCommandScopeAllChatAdministrators(),
+    )
+    for scope in scopes:
+        for lang in (None, "ru", "en"):
+            try:
+                await app.bot.delete_my_commands(scope=scope, language_code=lang)
+            except Exception as exc:
+                log.warning("delete_my_commands %s %s: %s", scope, lang, exc)
+
+    for admin_id in config.ADMIN_IDS:
+        try:
+            await app.bot.delete_my_commands(scope=BotCommandScopeChat(chat_id=admin_id))
+        except Exception as exc:
+            log.warning("delete_my_commands chat %s: %s", admin_id, exc)
+
+    await app.bot.set_my_commands(PUBLIC_COMMANDS)
+
+    for admin_id in config.ADMIN_IDS:
+        try:
+            await app.bot.set_my_commands(
+                ADMIN_COMMANDS, scope=BotCommandScopeChat(chat_id=admin_id))
+        except Exception as exc:
+            log.warning("set admin commands %s: %s", admin_id, exc)
+
+    log.info("command menu rebuilt")
+
+
 def main() -> None:
-    app = Application.builder().token(config.BOT_TOKEN).build()
+    app = Application.builder().token(config.BOT_TOKEN).post_init(post_init).build()
 
     app.add_handler(CommandHandler("start", cmd_start))
     app.add_handler(CommandHandler("status", cmd_status))
+    app.add_handler(CommandHandler("check", cmd_status))     # имя от старого бота
     app.add_handler(CommandHandler("help", cmd_help))
     app.add_handler(CommandHandler("subs", cmd_subs))
+    app.add_handler(CommandHandler("list", cmd_subs))        # имя от старого бота
     app.add_handler(CommandHandler("paid", cmd_paid))
     app.add_handler(CommandHandler("grant", cmd_paid))
     app.add_handler(CommandHandler("invite", cmd_invite))
