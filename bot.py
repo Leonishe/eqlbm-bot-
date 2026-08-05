@@ -132,7 +132,7 @@ async def heal_chat_menu(bot, chat_id: int, user_id: int) -> None:
         log.warning("heal menu %s: %s", chat_id, exc)
 
 
-
+async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     args = context.args or []
     user = update.effective_user
 
